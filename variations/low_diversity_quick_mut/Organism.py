@@ -1,33 +1,38 @@
 import math
-import time
 import random
 import pygame as pg
+import numpy as np
 
 pg.init()
 font = pg.font.SysFont(None, 24)
 
 
 class Organism:
-    def __init__(self, pos, color, speed, gen=0, max_age=random.randint(5, 9)) -> None:
+    def __init__(self, pos, color, speed, gen=0, color_weights=[random.randint(0, 5) for _ in range(3)], max_age=random.randint(100, 400), size=(20, 20)) -> None:
         self.COLOR = color
         self.gen = gen
         self.gen_render = font.render(str(self.gen), True, (255, 255, 255))
         self.speed = speed
+        # number of frames that the organism has been alive
         self.age = 0
-        self.born = time.time()
         # age of death
-        self.max_age = max_age
+        self.max_age = max_age if max_age < 700 else random.randint(100, 700)
 
         self.food_eaten = 0
         # amount of food eaten before reproducing
-        self.reproduce_food = random.randint(3, 5)
+        self.reproduce_food = random.randint(2, 4)
         self.target_food = None
+        # weights for color change on reproduction between 2 and 15
+        self.color_weights = color_weights
 
-        self.pos = pg.Rect(0, 0, 25, 25)
+        self.pos = pg.Rect(0, 0, *size)
         self.pos.center = pos
+        self.regulate_stats()
+
+    def regulate_stats(self):
+        pass
 
     def summon(self, screen):
-        self.age = time.time()
         pg.draw.rect(screen, self.COLOR, self.pos)
         screen.blit(
             self.gen_render,
@@ -38,31 +43,45 @@ class Organism:
         )
 
     def move(self, foods):
-        if self.target_food not in foods:
+        if self.target_food not in foods or self.target_food.eaten:
             self.target_food = None
             return
         dx = self.target_food.pos.centerx - self.pos.centerx
         dy = self.target_food.pos.centery - self.pos.centery
         d = math.hypot(dx, dy)
 
-        if not self.pos.colliderect(self.target_food.pos):
+        # check if the organism is close enough to eat
+        if not self.pos.collidepoint(self.target_food.pos.center):
             self.pos.centery += dy / d * self.speed
             self.pos.centerx += dx / d * self.speed
-        else:
-            self.eat(self.target_food)
 
-    def eat(self, food):
+        else:
+            self.eat()
+
+    def eat(self):
         self.target_food.eaten = True
         self.target_food = None
         self.food_eaten += 1
 
     def reproduce(self):
+      
+        # create the new organism's color based on the parent's color plus a random number generated from the color_weights
+        color = [i + random.randint(-cw, cw) 
+            for i, cw in zip(self.COLOR, self.color_weights)
+        ]
+        color = np.clip(color, 0, 255)
+        # create new color weights based on parent's color weights plus a random number 
+        color_weights = [abs(random.randint(cw - 1, cw + 1)) for cw in self.color_weights]
+        # clip color weights to be between 0 and 16
+        color_weights = np.clip(color_weights, 0, 16)
+        
         return Organism(
-            self.pos.center,
-            self.COLOR,
-            random.uniform(self.speed - 0.1, self.speed + 0.1),
+            self.pos.topleft,
+            color=color,
+            color_weights=color_weights,
+            speed=round(random.uniform(self.speed - 0.4, self.speed + 0.18), 3),
             gen=self.gen + 1,
-            max_age=random.randint(self.max_age - 2, self.max_age+ 2),
+            max_age=random.randint(self.max_age - 40, self.max_age + 30),
         )
 
     def find_dist(self, food):
